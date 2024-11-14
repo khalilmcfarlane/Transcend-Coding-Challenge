@@ -60,17 +60,17 @@ def run_integration(identifier, action_type):
                     status_code=mock.get("status_code", 200),
                 )
         access_result = dp.access(identifier)
-        data = access_result["data"]
+        # data = access_result[data]
+        data = access_result
         print("Data retrieved for " + identifier + ":")
-        print
         print(json.dumps(data, indent=2))
-        print
 
         if action_type == ActionType.Access:
             return
 
-    context = access_result["context"]
-    print("Context for the erasure: ", context)
+    # context = access_result["context"]
+    context = {"mailingLists": access_result}
+    print("Context for the erasure:\n", json.dumps(context, indent=2))
     print("\nRunning erasure...")
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Erasure}.json") as fp:
@@ -82,8 +82,34 @@ def run_integration(identifier, action_type):
                     json=mock["response"],
                     status_code=mock.get("status_code", 200),
                 )
-        dp.erasure(identifier, context)
+
+                # Run delete member from mailing list API.
+                # ERASURE.json only has 1 test case, but this works when adding additional test cases for other emails.
+                if mock["method"] == "DELETE":
+                    delete_url = mock["scope"] + mock.get("path")
+                    # Need to add check for email @, not removing right email rn
+                    dp.erasure(identifier, delete_url)
     print("All done!")
+
+
+def run_seed(identifier):
+    print("Seeding data...\n")
+    with requests_mock.Mocker() as m:
+        with open(f"{ActionType.Seed}.json") as fp:
+            seed_mocks = json.load(fp)
+            for mock in seed_mocks:
+                m.register_uri(
+                    mock["method"],
+                    mock["scope"] + mock.get("path"),
+                    json=mock["response"],
+                    status_code=mock.get("status_code", 200),
+                )
+                if mock["method"] == "POST":
+                    add_member_url = mock["scope"] + mock.get("path")
+                    # Ideally, you'd pass in mailing list address as well for API call.
+                    # SEED.json only contains data for one identifier, so you can't test this way.
+                    # This currently isn't adding for right email
+                    dp.seed(add_member_url, identifier)
 
 
 def main():
@@ -93,12 +119,14 @@ def main():
     # with the first identifier.
     # Once you're confident your code works, you can modify
     # this to refer to the entire list of identifiers!
-    data = [sample_identifiers_list[0]]
+    #data = [sample_identifiers_list[0]]
+    data = sample_identifiers_list
 
     # Run the functions for all the identifiers we want to test
     for identifier in data:
         if action == ActionType.Seed:
-            dp.seed(identifier)
+            # dp.seed(identifier)
+            run_seed(identifier)
 
         elif action == ActionType.Access or action == ActionType.Erasure:
             run_integration(identifier, action)
