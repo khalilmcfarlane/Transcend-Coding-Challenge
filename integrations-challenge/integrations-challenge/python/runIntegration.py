@@ -57,7 +57,7 @@ def run_integration(identifier, action_type):
                     mock["method"],
                     mock["scope"] + mock.get("path"),
                     json=mock["response"],
-                    status_code=mock.get("status_code", 200),
+                    status_code=mock.get("status", 200),
                 )
         access_result = dp.access(identifier)
         # data = access_result[data]
@@ -75,24 +75,30 @@ def run_integration(identifier, action_type):
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Erasure}.json") as fp:
             erasure_mocks = json.load(fp)
+            mailing_lists_to_delete = []
             for mock in erasure_mocks:
                 m.register_uri(
                     mock["method"],
                     mock["scope"] + mock.get("path"),
                     json=mock["response"],
-                    status_code=mock.get("status_code", 200),
+                    status_code=mock.get("status", 200),
                 )
 
-                # Run delete member from mailing list API.
-                # ERASURE.json only has 1 test case, but this works when adding additional test cases for other emails.
-                if mock["method"] == "DELETE":
-                    delete_url = mock["scope"] + mock.get("path")
-                    # Need to add check for email @, not removing right email rn
-                    dp.erasure(identifier, delete_url)
+                # Add mailing list to list of communities to remove the user from
+                # You can also just pass in full url via mock["scope"] + mock.get("path") for API
+                # Only delete if mock's address matches identifier
+                if "member" in mock["response"] and "address" in mock["response"]["member"]:
+                    mocked_address = mock["response"]["member"]["address"]
+
+                if mock["method"] == "DELETE" and mocked_address == identifier:
+                    mailing_list = dp.extract_mailing_list(mock["path"])
+                    mailing_lists_to_delete.append(mailing_list)
+        dp.erasure(identifier, mailing_lists_to_delete)
     print("All done!")
 
 
 def run_seed(identifier):
+    seeded_runs = 0
     print("Seeding data...\n")
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Seed}.json") as fp:
@@ -102,14 +108,19 @@ def run_seed(identifier):
                     mock["method"],
                     mock["scope"] + mock.get("path"),
                     json=mock["response"],
-                    status_code=mock.get("status_code", 200),
+                    status_code=mock.get("status", 200),
                 )
-                if mock["method"] == "POST":
-                    add_member_url = mock["scope"] + mock.get("path")
+                if "member" in mock["response"] and "address" in mock["response"]["member"]:
+                    mocked_address = mock["response"]["member"]["address"]
+
+                if mock["method"] == "POST" and mocked_address == identifier:
+                    mailing_list = dp.extract_mailing_list(mock["path"])
                     # Ideally, you'd pass in mailing list address as well for API call.
                     # SEED.json only contains data for one identifier, so you can't test this way.
                     # This currently isn't adding for right email
-                    dp.seed(add_member_url, identifier)
+                    dp.seed(identifier, mock["scope"], mailing_list)
+                    seeded_runs += 1
+    return seeded_runs
 
 
 def main():
@@ -119,14 +130,14 @@ def main():
     # with the first identifier.
     # Once you're confident your code works, you can modify
     # this to refer to the entire list of identifiers!
-    #data = [sample_identifiers_list[0]]
+    # data = [sample_identifiers_list[0]]
     data = sample_identifiers_list
 
     # Run the functions for all the identifiers we want to test
     for identifier in data:
         if action == ActionType.Seed:
-            # dp.seed(identifier)
-            run_seed(identifier)
+            runs = run_seed(identifier)
+            print(f"Successfully seeded {runs} identifiers.\n")
 
         elif action == ActionType.Access or action == ActionType.Erasure:
             run_integration(identifier, action)
