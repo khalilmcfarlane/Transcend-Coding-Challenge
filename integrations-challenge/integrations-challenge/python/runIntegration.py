@@ -32,7 +32,8 @@ def verify_action_args(args):
     valid_actions = [ActionType.Seed, ActionType.Erasure, ActionType.Access]
     if len(args) != 2:
         raise ValueError(
-            "This module accepts a single argument: python3 runIntegration.py <action>, where <action> can be one of: {}".format(
+            "This module accepts a single argument: python3 runIntegration.py <action>, where <action> can be one of: "
+            "{}".format(
                 ", ".join(valid_actions)
             )
         )
@@ -48,7 +49,7 @@ def run_integration(identifier, action_type):
     """
     Run the ACCESS and/or ERASURE flows for the given identifier.
     """
-    print("Running access...\n")
+    print(f"Running access for {identifier}...\n")
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Access}.json") as fp:
             access_mocks = json.load(fp)
@@ -60,18 +61,15 @@ def run_integration(identifier, action_type):
                     status_code=mock.get("status", 200),
                 )
         access_result = dp.access(identifier)
-        # data = access_result[data]
-        data = access_result
         print("Data retrieved for " + identifier + ":")
-        print(json.dumps(data, indent=2))
+        print(json.dumps(access_result, indent=2))
 
         if action_type == ActionType.Access:
             return
 
-    # context = access_result["context"]
     context = {"mailingLists": access_result}
     print("Context for the erasure:\n", json.dumps(context, indent=2))
-    print("\nRunning erasure...")
+    print(f"\nRunning erasure for {identifier}...")
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Erasure}.json") as fp:
             erasure_mocks = json.load(fp)
@@ -84,9 +82,9 @@ def run_integration(identifier, action_type):
                     status_code=mock.get("status", 200),
                 )
 
-                # Add mailing list to list of communities to remove the user from
-                # You can also just pass in full url via mock["scope"] + mock.get("path") for API
-                # Only delete if mock's address matches identifier
+                # Add mailing list to list of communities to remove the user from.
+                # You can also just pass in full url via mock["scope"] + mock.get("path") for API.
+                # Only delete if mock address matches identifier.
                 if "member" in mock["response"] and "address" in mock["response"]["member"]:
                     mocked_address = mock["response"]["member"]["address"]
 
@@ -99,7 +97,7 @@ def run_integration(identifier, action_type):
 
 def run_seed(identifier):
     seeded_runs = 0
-    print("Seeding data...\n")
+    print(f"Seeding data for {identifier}...\n")
     with requests_mock.Mocker() as m:
         with open(f"{ActionType.Seed}.json") as fp:
             seed_mocks = json.load(fp)
@@ -115,22 +113,16 @@ def run_seed(identifier):
 
                 if mock["method"] == "POST" and mocked_address == identifier:
                     mailing_list = dp.extract_mailing_list(mock["path"])
-                    # Ideally, you'd pass in mailing list address as well for API call.
-                    # SEED.json only contains data for one identifier, so you can't test this way.
-                    # This currently isn't adding for right email
                     dp.seed(identifier, mock["scope"], mailing_list)
                     seeded_runs += 1
     return seeded_runs
 
 
 def main():
+    """
+    Main entry point.
+    """
     action = verify_action_args(sys.argv)
-
-    # For now, we only want to run our application code
-    # with the first identifier.
-    # Once you're confident your code works, you can modify
-    # this to refer to the entire list of identifiers!
-    # data = [sample_identifiers_list[0]]
     data = sample_identifiers_list
 
     # Run the functions for all the identifiers we want to test
